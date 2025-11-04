@@ -12,3 +12,7 @@ django-cors-headers==4.4.0
 --only-binary=:all:
 numpy
 pandas
+
+dj-database-url
+psycopg2-binary
+
