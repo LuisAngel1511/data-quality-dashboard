@@ -1,14 +1,19 @@
 Django==5.0.6
 djangorestframework==3.15.2
-pandas==2.2.2
+
+# Versiones con wheels disponibles en Render (Py 3.11)
+pandas==2.2.3
 numpy==1.26.4
-pyarrow==16.1.0
+
+# (Temporal) evita Parquet hasta terminar el deploy
+# pyarrow==16.1.0  # <- comenta o elimina esta línea por ahora
+
 python-multipart==0.0.9
 gunicorn==21.2.0
 whitenoise==6.6.0
 django-cors-headers==4.4.0
 
+# Fuerza ruedas binarias (no compilar)
 --only-binary=:all:
 numpy
 pandas
-pyarrow
