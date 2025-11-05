@@ -4,15 +4,14 @@ from django.shortcuts import render
 from django.http import JsonResponse
 
 def root_view(request):
-    # Página del dashboard (plantilla)
     return render(request, "dashboard.html")
 
-def ping_view(request):
-    return JsonResponse({"pong": True})
+def api_health(_):
+    return JsonResponse({"ok": True, "where": "backend.urls"})
 
 urlpatterns = [
-    path("", root_view),                     # raíz (dashboard)
-    path("ping/", ping_view),                # prueba rápida JSON
     path("admin/", admin.site.urls),
-    path("api/", include("datasets.urls")),  # 👈 incluye las rutas de la API
+    path("api/health/", api_health),          # ← PRUEBA A
+    path("api/", include("datasets.urls")),   # ← API de la app
+    path("", root_view),
 ]
