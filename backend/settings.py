@@ -1,32 +1,24 @@
-# backend/settings.py
-from pathlib import Path
 import os
+from pathlib import Path
+import dj_database_url
 
-# === Rutas base ===
+# BASE DIR
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# === Clave secreta ===
-# En producción, define DJANGO_SECRET_KEY en variables de entorno
-SECRET_KEY = os.environ.get(
-    "DJANGO_SECRET_KEY",
-    "dev-secret-key-CHANGE-ME"
-)
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-secret-key")
 
-# === Modo debug ===
-# Por defecto True en local. En Render/Railway se recomienda poner DEBUG=false en env.
+# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG", "True").lower() == "true"
 
-# === Hosts permitidos ===
-# Para pruebas en Render usamos '*'. En producción, pon tu dominio explícito.
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "*").split(",")
+# Allow all hosts in local, restrict on Render dynamically
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
-# === Confianza CSRF para Render (HTTPS) ===
-RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL", "")
-if RENDER_URL:
-    # Render provee una URL http://...; convertimos a https:// para CSRF
-    CSRF_TRUSTED_ORIGINS = [RENDER_URL.replace("http://", "https://")]
+RENDER_EXTERNAL_HOSTNAME = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
-# === Aplicaciones ===
+# Applications
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -34,19 +26,16 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    # Terceros
     "rest_framework",
     "corsheaders",
-    # Apps locales
-    "datasets",
+    "api",  # tu app principal
 ]
 
-# === Middleware ===
+# Middleware
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -54,12 +43,14 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+# CORS (para que tu frontend pueda llamar a la API)
+CORS_ALLOW_ALL_ORIGINS = True
+
+# URLS y WSGI
 ROOT_URLCONF = "backend.urls"
 
 TEMPLATES = [
-    
-            
-HEAD
+    {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
@@ -69,17 +60,6 @@ HEAD
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
-
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / "templates"],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-    db29c82 (update: dashboard.html configurado con API de Render)
             ],
         },
     },
@@ -87,53 +67,48 @@ HEAD
 
 WSGI_APPLICATION = "backend.wsgi.application"
 
-# === Base de datos ===
-# Por defecto SQLite (local). Si defines DATABASE_URL, la usamos (Render/Render Postgres).
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+# Database (local SQLite o Render PostgreSQL)
+if os.environ.get("DATABASE_URL"):
+    DATABASES = {
+        "default": dj_database_url.parse(os.environ["DATABASE_URL"], conn_max_age=600)
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
-_db_url = os.environ.get("DATABASE_URL")
-if _db_url:
-    try:
-        import dj_database_url  # opcional; añade a requirements si usarás Postgres
-        DATABASES["default"] = dj_database_url.parse(_db_url, conn_max_age=600)
-    except Exception:
-        # Si no está instalado dj_database_url, nos quedamos con SQLite
-        pass
+# Password validation
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
 
-# === Internacionalización ===
+# Localization
 LANGUAGE_CODE = "es-es"
-TIME_ZONE = "UTC"
+TIME_ZONE = "America/Mexico_City"
 USE_I18N = True
 USE_TZ = True
 
-# === Archivos estáticos y media ===
+# Static files
 STATIC_URL = "static/"
+STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
-# WhiteNoise para servir estáticos en producción
-STORAGES = {
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
-    }
-}
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
+# Media files
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-# === DRF ===
-REST_FRAMEWORK = {
-    "DEFAULT_RENDERER_CLASSES": [
-        "rest_framework.renderers.JSONRenderer",
-    ],
-}
-
-# === CORS ===
-# En desarrollo permitimos todos; en prod puedes restringir con CORS_ALLOWED_ORIGINS
-CORS_ALLOW_ALL_ORIGINS = True if DEBUG else True  # ajusta a tu gusto
-
-# === Clave primaria por defecto ===
+# Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Configuración para Render (CSRF y host)
+RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
+if RENDER_URL:
+    CSRF_TRUSTED_ORIGINS = [RENDER_URL.replace("http://", "https://")]
+
