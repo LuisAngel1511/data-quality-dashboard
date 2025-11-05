@@ -11,7 +11,7 @@ numpy==1.26.4
 
 # (Temporal) evita Parquet hasta terminar el deploy
 # pyarrow==16.1.0  # <- comenta o elimina esta línea por ahora
->>>>>>> db29c82 (update: dashboard.html configurado con API de Render)
+db29c82 (update: dashboard.html configurado con API de Render)
 
 python-multipart==0.0.9
 gunicorn==21.2.0
