@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Data Quality Dashboard</title>
+  <!-- Bootstrap (estilos rápidos) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    body { background: #0f172a; color: #e2e8f0; }
+    .card { background: #111827; border: 1px solid #1f2937; }
+    .form-control, .form-select { background: #0b1220; color: #e2e8f0; border-color: #334155; }
+    a, .link { color: #7dd3fc; }
+    .kpi { font-size: 1.4rem; font-weight: 700; }
+    .muted { color:#94a3b8; }
+    .code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    .table { color: #e2e8f0; }
+    .table thead th { color:#cbd5e1; }
+  </style>
+</head>
+<body>
+<div class="container py-4">
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <h1 class="h3 m-0">Data Quality Dashboard</h1>
+    <span class="muted">API: <span id="apiLabel" class="code"></span></span>
+  </div>
+
+  <!-- Controles -->
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <label class="form-label">Servidor API</label>
+      <input id="apiBase" class="form-control" placeholder="http://127.0.0.1:8000" />
+      <div class="form-text">En Render: https://tu-app.onrender.com</div>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Dataset</label>
+      <select id="datasetSelect" class="form-select"></select>
+      <div class="form-text">Selecciona un dataset cargado o sube uno.</div>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Columna (para distribución)</label>
+      <select id="columnSelect" class="form-select"></select>
+    </div>
+    <div class="col-md-3 d-flex align-items-end">
+      <button id="refreshBtn" class="btn btn-primary w-100">Actualizar</button>
+    </div>
+  </div>
+
+  <!-- Subida de dataset -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <h5 class="card-title">Subir nuevo dataset (CSV/Parquet)</h5>
+      <form id="uploadForm" class="row g-2">
+        <div class="col-md-5">
+          <input type="file" id="fileInput" class="form-control" required />
+        </div>
+        <div class="col-md-3">
+          <input type="text" id="nameInput" class="form-control" placeholder="Nombre (opcional)" />
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-success w-100" type="submit">Subir</button>
+        </div>
+        <div class="col-md-2">
+          <span id="uploadStatus" class="muted"></span>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="row g-3 mb-4" id="kpis">
+    <div class="col-md-3">
+      <div class="card p-3">
+        <div class="muted">Filas</div>
+        <div class="kpi" id="kpiRows">—</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3">
+        <div class="muted">Columnas</div>
+        <div class="kpi" id="kpiCols">—</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3">
+        <div class="muted">% Nulos total</div>
+        <div class="kpi" id="kpiNulls">—</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3">
+        <div class="muted">Duplicados</div>
+        <div class="kpi" id="kpiDups">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gráficos -->
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <div class="card p-3">
+        <h5 class="mb-3">Nulos por columna</h5>
+        <canvas id="nullsChart" height="220"></canvas>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card p-3">
+        <h5 class="mb-3">Distribución de columna seleccionada</h5>
+        <canvas id="distChart" height="220"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Duplicados: muestra -->
+  <div class="card mt-4">
+    <div class="card-body">
+      <h5 class="mb-3">Muestra de filas duplicadas</h5>
+      <div class="table-responsive">
+        <table class="table table-sm table-striped">
+          <thead id="dupsHead"></thead>
+          <tbody id="dupsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // === CONFIG ===
+  const API_BASE_INPUT = document.getElementById('apiBase');
+  const API_LABEL = document.getElementById('apiLabel');
+
+  // Cambia esto por tu URL de Render si vas a usar la nube por defecto.
+  let API_BASE = localStorage.getItem('API_BASE') || "https://data-quality-dashboard-9mfs.onrender.com";
+  API_BASE_INPUT.value = API_BASE;
+  API_LABEL.textContent = API_BASE;
+
+  API_BASE_INPUT.addEventListener('change', () => {
+    API_BASE = API_BASE_INPUT.value.trim().replace(/\/+$/,'');
+    localStorage.setItem('API_BASE', API_BASE);
+    API_LABEL.textContent = API_BASE;
+    loadDatasets();
+  });
+
+  // === ELEMENTOS ===
+  const dsSelect = document.getElementById('datasetSelect');
+  const colSelect = document.getElementById('columnSelect');
+  const refreshBtn = document.getElementById('refreshBtn');
+
+  const kpiRows = document.getElementById('kpiRows');
+  const kpiCols = document.getElementById('kpiCols');
+  const kpiNulls = document.getElementById('kpiNulls');
+  const kpiDups = document.getElementById('kpiDups');
+
+  const dupsHead = document.getElementById('dupsHead');
+  const dupsBody = document.getElementById('dupsBody');
+
+  // === CHARTS ===
+  let nullsChart, distChart;
+
+  function mkBarChart(ctx, labels, data, title='') {
+    if (nullsChart) nullsChart.destroy();
+    nullsChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets: [{ label: title || 'Valores nulos', data }]},
+      options: { responsive:true, maintainAspectRatio:false, scales:{x:{ticks:{color:'#94a3b8'}}, y:{ticks:{color:'#94a3b8'}}}, plugins:{legend:{labels:{color:'#cbd5e1'}}}}
+    });
+  }
+
+  function mkDistChart(ctx, labels, data, title='') {
+    if (distChart) distChart.destroy();
+    distChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets: [{ label: title || 'Distribución', data }]},
+      options: { responsive:true, maintainAspectRatio:false, scales:{x:{ticks:{color:'#94a3b8'}}, y:{ticks:{color:'#94a3b8'}}}, plugins:{legend:{labels:{color:'#cbd5e1'}}}}
+    });
+  }
+
+  // === API HELPERS ===
+  async function apiGet(path) {
+    const res = await fetch(`${API_BASE}${path}`);
+    if (!res.ok) throw new Error(`GET ${path} -> ${res.status}`);
+    return res.json();
+  }
+  async function apiPostUpload(file, name) {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (name) fd.append('name', name);
+    const res = await fetch(`${API_BASE}/api/datasets/upload/`, { method:'POST', body: fd });
+    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+    return res.json();
+  }
+
+  // === FLUJO ===
+  async function loadDatasets() {
+    dsSelect.innerHTML = '';
+    const list = await apiGet('/api/datasets/');
+    list.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d.id;
+      opt.textContent = `${d.id} — ${d.name}`;
+      dsSelect.appendChild(opt);
+    });
+    if (list.length) {
+      await loadSchemaAndKpis(list[0].id);
+    } else {
+      // Limpia UI
+      kpiRows.textContent = '—';
+      kpiCols.textContent = '—';
+      kpiNulls.textContent = '—';
+      kpiDups.textContent = '—';
+      colSelect.innerHTML = '';
+    }
+  }
+
+  async function loadSchemaAndKpis(datasetId) {
+    const data = await apiGet(`/api/datasets/${datasetId}/schema/`);
+    // KPIs
+    const s = data.profile?.stats_json || {};
+    kpiRows.textContent = s.rows ?? '—';
+    kpiCols.textContent = s.cols ?? '—';
+    kpiNulls.textContent = (s.nulls_pct !== undefined) ? (s.nulls_pct*100).toFixed(2)+'%' : '—';
+    kpiDups.textContent = s.duplicates ?? '—';
+
+    // Columnas
+    colSelect.innerHTML = '';
+    (data.columns || []).forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.name;
+      opt.textContent = `${c.name} (${c.role})`;
+      colSelect.appendChild(opt);
+    });
+
+    // Carga gráficos iniciales
+    await loadNulls(datasetId);
+    if (colSelect.value) await loadDistribution(datasetId, colSelect.value);
+  }
+
+  async function loadNulls(datasetId) {
+    const r = await apiGet(`/api/datasets/${datasetId}/nulls/`);
+    const labels = r.per_column.map(x => x.col).slice(0, 30);
+    const data = r.per_column.map(x => (x.pct*100)).slice(0, 30);
+    mkBarChart(document.getElementById('nullsChart'), labels, data, '% nulos');
+  }
+
+  async function loadDistribution(datasetId, col) {
+    const r = await apiGet(`/api/datasets/${datasetId}/distributions/?col=${encodeURIComponent(col)}&bins=20`);
+    if (r.type === 'numeric') {
+      const labels = r.values.map(v => v.bin);
+      const data = r.values.map(v => v.count);
+      mkDistChart(document.getElementById('distChart'), labels, data, 'Histograma');
+    } else {
+      const top = r.values.slice(0, 30);
+      mkDistChart(document.getElementById('distChart'), top.map(v => v.label), top.map(v => v.count), 'Conteo categorías');
+    }
+  }
+
+  async function loadDuplicatesPreview(datasetId) {
+    const r = await apiGet(`/api/datasets/${datasetId}/duplicates/`);
+    // tabla
+    dupsHead.innerHTML = '';
+    dupsBody.innerHTML = '';
+    if (!r.sample_rows || !r.sample_rows.length) {
+      dupsHead.innerHTML = '<tr><th class="muted">Sin duplicados de muestra</th></tr>';
+      return;
+    }
+    const cols = Object.keys(r.sample_rows[0]);
+    dupsHead.innerHTML = `<tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr>`;
+    dupsBody.innerHTML = r.sample_rows.map(row => 
+      `<tr>${cols.map(c=>`<td>${row[c]}</td>`).join('')}</tr>`
+    ).join('');
+  }
+
+  // Eventos
+  dsSelect.addEventListener('change', async () => {
+    const id = dsSelect.value;
+    await loadSchemaAndKpis(id);
+    await loadDuplicatesPreview(id);
+  });
+
+  colSelect.addEventListener('change', async () => {
+    const id = dsSelect.value;
+    if (id && colSelect.value) await loadDistribution(id, colSelect.value);
+  });
+
+  refreshBtn.addEventListener('click', async () => {
+    const id = dsSelect.value;
+    if (id) {
+      await loadSchemaAndKpis(id);
+      await loadDuplicatesPreview(id);
+    } else {
+      await loadDatasets();
+    }
+  });
+
+  document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const file = document.getElementById('fileInput').files[0];
+    const name = document.getElementById('nameInput').value.trim();
+    const status = document.getElementById('uploadStatus');
+    if (!file) return;
+    status.textContent = 'Subiendo...';
+    try {
+      const r = await apiPostUpload(file, name);
+      status.textContent = `OK (id=${r.dataset_id})`;
+      await loadDatasets();
+      dsSelect.value = r.dataset_id;
+      await loadSchemaAndKpis(r.dataset_id);
+      await loadDuplicatesPreview(r.dataset_id);
+    } catch (err) {
+      console.error(err);
+      status.textContent = 'Error al subir';
+    }
+  });
+
+  // Arranque
+  (async function init(){
+    await loadDatasets();
+    const id = dsSelect.value;
+    if (id) await loadDuplicatesPreview(id);
+  })();
+</script>
+</body>
+</html>

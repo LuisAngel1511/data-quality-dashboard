@@ -1,9 +1,14 @@
 from django.contrib import admin
 from django.urls import path, include
-from django.conf import settings
-from django.conf.urls.static import static
+from django.http import HttpResponse
+from django.shortcuts import render
+
+def root_view(request):
+    # renderiza la plantilla del dashboard
+    return render(request, "dashboard.html")
 
 urlpatterns = [
+    path("", root_view),                    #  página del dashboard
     path("admin/", admin.site.urls),
-    path("api/", include("datasets.urls")),  # 👈 importante
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    path("api/", include("datasets.urls")), # API ya existente
+]
