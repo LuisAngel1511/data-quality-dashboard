@@ -13,8 +13,6 @@ django-cors-headers==4.4.0
 dj-database-url==2.1.0
 psycopg2-binary==2.9.9
 
-# Optional (if you process parquet or large data)
 # pyarrow==16.1.0
 
-# Environment management
 python-dotenv==1.0.1
