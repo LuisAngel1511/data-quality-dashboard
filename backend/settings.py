@@ -28,7 +28,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "corsheaders",
-    "api",  # tu app principal
+    "datasets",  # tu app principal
 ]
 
 # Middleware
